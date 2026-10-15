@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Galaxy: Меню</title>
+  <style>
+    :root { --bg: #0f111a; --card: #151b28; --accent: #6366f1; --green: #22c55e; --text: #e5e7eb; --dim: #6b7280; }
+    body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    .container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+
+    h1 { margin: 0 0 20px; font-weight: 700; letter-spacing: -0.5px; }
+
+    /* Категории */
+    .cats { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 12px; scrollbar-width: none; }
+    .cats::-webkit-scrollbar { display: none; }
+    .cat-btn { background: transparent; border: 1px solid rgba(255,255,255,0.1); color: var(--text); padding: 8px 16px; border-radius: 12px; cursor: pointer; white-space: nowrap; font-size: 14px; }
+    .cat-btn.active { border-color: var(--accent); color: var(--accent); }
+
+    /* Товары */
+    .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+    .product { background: var(--card); padding: 20px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; justify-content: space-between; }
+    .p-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .p-name { font-size: 17px; font-weight: 600; }
+    .p-price { color: var(--green); font-weight: 700; font-size: 18px; }
+    .add-btn { width: 100%; padding: 12px; background: rgba(99, 102, 241, 0.15); color: var(--accent); border: none; border-radius: 10px; cursor: pointer; font-weight: 600; transition: background 0.2s; }
+    .add-btn:hover { background: rgba(99, 102, 241, 0.25); }
+
+    /* Корзина */
+    #cart-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 999; align-items: flex-end; padding: 16px; box-sizing: border-box; }
+    .cart-box { background: var(--card); border-radius: 20px 20px 0 0; padding: 24px; max-height: 80vh; overflow-y: auto; width: 100%; }
+    .cart-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .remove-btn { color: #ef4444; background: none; border: none; cursor: pointer; font-size: 20px; line-height: 1; }
+    .cart-total { font-size: 24px; font-weight: 700; color: var(--green); text-align: right; margin-top: 16px; }
+    .checkout-btn { width: 100%; margin-top: 16px; padding: 16px; background: var(--accent); color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Galaxy Menu</h1>
+    <div class="cats" id="cats"></div>
+    <div class="products" id="products"></div>
+  </div>
+
+  <!-- Корзина -->
+  <div id="cart-modal">
+    <div class="cart-box">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h2 style="margin:0;font-size:22px;">Ваша корзина</h2>
+        <button onclick="toggleCart(false)" style="background:none;border:none;color:var(--text);cursor:pointer;font-size:24px;">✕</button>
+      </div>
+      <div id="cart-items"></div>
+      <div class="cart-total" id="cart-total">0 ₽</div>
+      <button class="checkout-btn" onclick="checkoutOrder()">Оформить заказ</button>
+    </div>
+  </div>
+
+  <script type="module">
+    // === ВСТАВЬ СЮДА СВОЙ ANON KEY (40 символов) ===
+    const SUPABASE_URL = 'https://hngxzzybtymktnvbftrf.supabase.co';
+    const SUPABASE_ANON_KEY = 'ВСТАВЬ_СЮДА_ANON_KEY';
+
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const menu = [
+      { cat: 'Пиццы', items: [{name:'Пицца с грибами',price:300},{name:'Пицца с сыром',price:290},{name:'Пицца Фир. БОЛА',price:320}] },
+      { cat: 'Выпечка', items: [{name:'Пончик с киви',price:100},{name:'Пончик с карамелью',price:100},{name:'Пончик с клубникой',price:100}] },
+      { cat: 'Choco Galaxy', items: [{name:'Choco клубника-киви',price:92},{name:'Choco виноград',price:90},{name:'Choco мята-виноград',price:95}] },
+      { cat: 'Напитки', items: [{name:'GALAXY GAL маршмеллоу',price:200},{name:'GALAXY GAL карамель',price:200}] },
+      { cat: 'Кофе', items: [{name:'Капучино',price:150},{name:'Латте',price:150}] },
+      { cat: 'Чай', items: [{name:'Фруктовый чай',price:120},{name:'Облепиховый чай',price:120}] }
+    ];
+
+    let cart = [];
+
+    // Рендер категорий
+    const catsEl = document.getElementById('cats');
+    menu.forEach((m, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'cat-btn' + (i===0 ? ' active' : '');
+      btn.textContent = m.cat;
+      btn.onclick = () => showCategory(i);
+      catsEl.appendChild(btn);
+    });
+
+    function showCategory(idx) {
+      document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.cat-btn')[idx].classList.add('active');
+      
+      const productsEl = document.getElementById('products');
+      productsEl.innerHTML = menu[idx].items.map(p => `
+        <div class="product">
+          <div class="p-info">
+            <span class="p-name">${p.name}</span>
+            <span class="p-price">${p.price} ₽</span>
+          </div>
+          <button class="add-btn" onclick="addToCart('${p.name}', ${p.price})">В корзину</button>
+        </div>
+      `).join('');
+    }
+    showCategory(0);
+
+    // Корзина
+    function addToCart(name, price) {
+      const item = cart.find(i => i.name === name);
+      if (item) item.qty++;
+      else cart.push({ name, price, qty: 1 });
+      renderCart();
+    }
+
+    function removeFromCart(idx) {
+      cart.splice(idx, 1);
+      renderCart();
+    }
+
+    function renderCart() {
+      const itemsEl = document.getElementById('cart-items');
+      const totalEl = document.getElementById('cart-total');
+      itemsEl.innerHTML = '';
+      let total = 0;
+
+      cart.forEach((i, idx) => {
+        total += i.price * i.qty;
+        itemsEl.innerHTML += `
+          <div class="cart-item">
+            <span><strong>${i.name}</strong> × ${i.qty}</span>
+            <button class="remove-btn" onclick="removeFromCart(${idx})">−</button>
+          </div>`;
+      });
+      totalEl.textContent = total + ' ₽';
+    }
+
+    function toggleCart(show) {
+      document.getElementById('cart-modal').style.display = show ? 'flex' : 'none';
+    }
+
+    async function checkoutOrder() {
+      if (!cart.length) return alert('Корзина пуста');
+      const total = cart.reduce((s, i) => s + i.price*i.qty, 0);
+      const items = cart.map(i => ({ name: i.name, price: i.price, qty: i.qty }));
+
+      const { error } = await supabase.from('orders').insert([{ items, total, status: 'new' }]);
+      if (error) return alert('Ошибка отправки: ' + error.message);
+
+      alert('Заказ отправлен на кухню! Ждите готовности.');
+      cart = [];
+      renderCart();
+      toggleCart(false);
+    }
+  </script>
+</body>
+</html>
